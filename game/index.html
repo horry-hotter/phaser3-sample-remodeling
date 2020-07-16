@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.15.1/dist/phaser-arcade-physics.min.js"></script>
+</head>
+<body>
+    <script>
+        var config = {
+            type: Phaser.AUTO,
+            width: 800,
+            height: 600,
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    gravity: { y: 300 },
+                    debug: false
+                }
+            },
+            scene: {
+                preload: preload,
+                create: create,
+                update: update
+            }
+        };
+
+        var player;
+        var stars;
+        var platforms;
+        var cursors;
+        var score = 0;
+        var scoreText;
+        var condition;
+        var conditionData=[
+            '鮮やかにスターを回収するその姿、まさに星屑の男！',
+            'なぜ星を集めるのか？・・・そこに星があるからだ！',
+            'イイネ！！！',
+            'なぜこの男は星に当たっても痛くないのか！？',
+            '崖っぷち！！！'
+        ];
+        var conditionNumber = Phaser.Math.Between(0, 4);
+
+        var game = new Phaser.Game(config);
+
+        // アセットの取得などに使う
+        function preload ()
+        {
+            this.load.image('sky', 'assets/sky.png');
+            this.load.image('ground', 'assets/platform.png');
+            this.load.image('star', 'assets/star.png');
+            this.load.image('bomb', 'assets/bomb.png');
+            this.load.spritesheet('dude', 'assets/dude.png',
+                { frameWidth: 32, frameHeight: 48 }
+            );
+        }
+
+        // 背景やプレイヤーの初期配置
+        function create ()
+        {
+            this.add.image(400, 300, 'sky');
+            platforms = this.physics.add.staticGroup();
+
+            // 床
+            platforms.create(400, 568, 'ground').setScale(2).refreshBody();
+
+            // 下から１番近い床
+            platforms.create(600, 400, 'ground');
+
+            // 左
+            platforms.create(50, 250, 'ground');
+
+            // 右上
+            platforms.create(750, 220, 'ground');
+
+            // プレイヤーを追加
+            player = this.physics.add.sprite(100, 450, 'dude');
+
+            player.setBounce(0.2); // キャラクターが高さに応じてバウンドする
+            player.setCollideWorldBounds(true);
+            // player.body.setGravityY(300);
+
+
+            this.anims.create({
+                key: 'left',
+                frames: this.anims.generateFrameNumbers('dude', { start: 0, end: 3 }),
+                frameRate: 10,
+                repeat: -1
+            });
+
+            this.anims.create({
+                key: 'turn',
+                frames: [ { key: 'dude', frame: 4 } ],
+                frameRate: 20
+            });
+
+            this.anims.create({
+                key: 'right',
+                frames: this.anims.generateFrameNumbers('dude', { start: 5, end: 8 }),
+                frameRate: 10,
+                repeat: -1
+            });
+
+            // キーを押せるようにする
+            cursors = this.input.keyboard.createCursorKeys();
+
+            // スターの設定（個数や出現位置）
+            stars = this.physics.add.group({
+                key: 'star',
+                repeat: 11, // 個数
+                setXY: { x: 12, y: 0, stepX: 70 } // 出現箇所の設定(横の位置、縦の位置)
+            });
+
+            // スターのアクション?
+            stars.children.iterate(function (child) {
+                
+                // 跳ね返る設定
+                // child.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8));
+                child.setBounce(1); // 新規
+                
+                // 画面内からはみ出ないようにする（跳ね返る）
+                child.setCollideWorldBounds(true); // 新規
+
+                // この関数で色んな方向にバウンドするようになっているっぽい
+                child.setVelocity(Phaser.Math.Between(-200, 200), 20); // 新規
+            });
+
+            bombs = this.physics.add.group();
+
+            // スコアを表示
+            scoreText = this.add.text(16, 16, 'score: 0', { fontSize: '32px', fill: '#000' });
+
+            // 実況の場所
+            condition = this.add.text(20, 560, 'ゲーム開始イイイ！！！', { fontSize: '24px', fill: '#fff' });
+
+
+            this.physics.add.collider(player, platforms);
+            this.physics.add.collider(stars, platforms);
+            this.physics.add.collider(bombs, platforms);
+
+            this.physics.add.overlap(player, stars, collectStar, null, this);
+            this.physics.add.collider(player, bombs, hitBomb, null, this);
+        }
+
+        // ゲームの進行に呼び出される関数
+        function update()
+        {
+            if (cursors.left.isDown)
+            {
+                player.setVelocityX(-160);
+
+                player.anims.play('left', true);
+            }
+            else if (cursors.right.isDown)
+            {
+                player.setVelocityX(160);
+
+                player.anims.play('right', true);
+            }
+            else
+            {
+                player.setVelocityX(0);
+
+                player.anims.play('turn');
+            }
+
+            if (cursors.up.isDown && player.body.touching.down)
+            {
+                player.setVelocityY(-330);
+            }
+        }
+
+        // スターを取得した時
+        function collectStar (player, star)
+        {
+            star.disableBody(true, true);
+            score += 10;
+            scoreText.setText('Score: ' + score);　
+            condition.setText(conditionData[conditionNumber]); // ランダムな実況を設定
+            conditionNumber = Phaser.Math.Between(0, 4); // 別の実教を設定する
+
+
+            if (stars.countActive(true) === 0)
+            {
+                stars.children.iterate(function (child) {
+
+                    var starPosition = (child.x < 400) ? Phaser.Math.Between(400, 800) : Phaser.Math.Between(0, 400);
+                    child.enableBody(true, starPosition, 0, true, true); // child.x → starPositionに変更
+
+                    // 画面内からはみ出ないようにする（跳ね返る）
+                    child.setCollideWorldBounds(true); // 新規
+
+                    // この関数で色んな方向にバウンドするようになっているっぽい
+                    child.setVelocity(Phaser.Math.Between(-200, 200), 20); // 新規
+                });
+
+                // プレイヤーの位置によって出現位置を変えている
+                var x = (player.x < 400) ? Phaser.Math.Between(400, 800) : Phaser.Math.Between(0, 400);
+
+                // 爆弾を生成
+                var bomb = bombs.create(x, 16, 'bomb');
+                bomb.setBounce(1);
+
+                // 画面内からはみ出ないようにする（跳ね返る）
+                bomb.setCollideWorldBounds(true);
+
+                // この関数で色んな方向にバウンドするようになっているっぽい
+                bomb.setVelocity(Phaser.Math.Between(-200, 200), 20);
+
+            }
+        }
+
+        // 爆弾に当たった時呼び出される
+        function hitBomb (player, bomb)
+        {
+            this.physics.pause();
+            player.setTint(0xff0000);
+            player.anims.play('turn');
+
+            // ゲームオーバー時のコメント
+            if(score >= 360){
+                condition.setText('Excellent!!!先生と呼ばせてください！');
+            } else if(score >= 240 ){
+                condition.setText('Nice!いいスコアだ・・・！');
+            } else {
+                condition.setText('お疲れ様でした！');
+            }
+            gameOver = true;
+        }
+    </script>
+</body>
+</html>
