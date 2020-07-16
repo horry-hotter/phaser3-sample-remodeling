@@ -1,0 +1,2 @@
+# phaser3-sample-remodeling
+Phaser3で作成したサンプルゲームをちょっと改造したもの
